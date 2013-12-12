@@ -14,6 +14,7 @@ const ArticlePath string = "articles"
 const ViewPath string = "views"
 const LayoutPath string = "layout.html"
 var TemplateDict *template.Template
+var view *Layout
 
 type Page struct {
  Title string
@@ -32,8 +33,10 @@ type Layout struct {
 
 // Render function
 //
-func (layout *Layout) render(w io.Writer, c template.HTML) {
-  layout.Content = c
+func (layout *Layout) render(w io.Writer, p *Page, partial string) {
+  buf := new(bytes.Buffer)
+  TemplateDict.ExecuteTemplate(buf, partial, p)
+  layout.Content = template.HTML(buf.String())
   TemplateDict.ExecuteTemplate(w, layout.Tmpl, layout)
 }
 
@@ -66,8 +69,7 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
   }
   buf := new(bytes.Buffer)
   TemplateDict.ExecuteTemplate(buf, "view.html", p)
-  layout, _ := loadLayout(LayoutPath)
-  layout.render(w, template.HTML(buf.String()))
+  view.render(w, p, "view.html")
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +79,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
     p = &Page{Title: title}
   }
 
-  buf := new(bytes.Buffer)
-  TemplateDict.ExecuteTemplate(buf, "edit.html", p)
-  layout, _ := loadLayout(LayoutPath)
-  layout.render(w, template.HTML(buf.String()))
+  view.render(w, p, "edit.html")
 }
 
 func saveHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +93,7 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
 // Cache the Templates file
 func init() {
   TemplateDict, _ = template.ParseGlob("views/*.html")
+  view, _ = loadLayout(LayoutPath)
 }
 
 func main() {
