@@ -7,11 +7,13 @@ import (
   "io"
   "io/ioutil"
   "net/http"
+  "log"
 )
 
 const ArticlePath string = "articles"
 const ViewPath string = "views"
-const LayoutPath string = "views/layout.html"
+const LayoutPath string = "layout.html"
+var TemplateDict *template.Template
 
 type Page struct {
  Title string
@@ -28,10 +30,18 @@ type Layout struct {
   Content template.HTML
 }
 
+// Render function
+//
 func (layout *Layout) render(w io.Writer, c template.HTML) {
-  l, _ := template.ParseFiles(layout.Tmpl)
   layout.Content = c
-  l.Execute(w, layout)
+  TemplateDict.ExecuteTemplate(w, layout.Tmpl, layout)
+}
+
+func Log(handler http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+        handler.ServeHTTP(w, r)
+    })
 }
 
 func loadPage(title string) (*Page, error) {
@@ -54,9 +64,8 @@ func viewHandler(w http.ResponseWriter, r *http.Request) {
     http.Redirect(w, r, "/edit/"+title, http.StatusFound)
     return
   }
-  t, _ := template.ParseFiles(filepath.Join(ViewPath, "view.html"))
   buf := new(bytes.Buffer)
-  t.Execute(buf, p)
+  TemplateDict.ExecuteTemplate(buf, "view.html", p)
   layout, _ := loadLayout(LayoutPath)
   layout.render(w, template.HTML(buf.String()))
 }
@@ -68,9 +77,8 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
     p = &Page{Title: title}
   }
 
-  t, _ := template.ParseFiles(filepath.Join(ViewPath,"edit.html"))
   buf := new(bytes.Buffer)
-  t.Execute(buf, p)
+  TemplateDict.ExecuteTemplate(buf, "edit.html", p)
   layout, _ := loadLayout(LayoutPath)
   layout.render(w, template.HTML(buf.String()))
 }
@@ -83,6 +91,11 @@ func saveHandler(w http.ResponseWriter, r *http.Request) {
   http.Redirect(w, r, "/view/"+title, http.StatusFound)
 }
 
+// Cache the Templates file
+func init() {
+  TemplateDict, _ = template.ParseGlob("views/*.html")
+}
+
 func main() {
   http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
     http.Redirect(w, r, "/view/index", http.StatusFound)
@@ -90,5 +103,5 @@ func main() {
   http.HandleFunc("/view/", viewHandler)
   http.HandleFunc("/edit/", editHandler)
   http.HandleFunc("/save/", saveHandler)
-  http.ListenAndServe(":8080", nil)
+  http.ListenAndServe(":8080", Log(http.DefaultServeMux))
 }
